@@ -1,0 +1,43 @@
+# Bayesian Optimation을 통하여 Objective function의 minimum값을 반환하는 입력변수쌍을 찾는다.
+# 필요한 모듈들을 import한다
+from hyperopt import hp
+from hyperopt import STATUS_OK
+from hyperopt import fmin, tpe, Trials
+import numpy as np
+import pandas as pd
+
+# 검색공간 생성
+# 반드시 아래와 같이 Dictionary 형태여야 한다
+# quniform : 두 번째 인자와 세 번짜 사이의 수를 네 번째 인자 간격으로 반환해준다.
+
+search_space = {'x':hp.quniform('x',-10,10,1), 'y':hp.quniform('y',-15,15,1) }
+
+# 목적함수 생성
+# x^2 - 20y 함수를 예시로 사용
+
+def objective_func(search_space):
+  x = search_space['x']
+  y = search_space['y']
+  retval = x**2 - 20*y
+
+  return retval
+
+# 베이지안 최적화를 통하여 순차적으로 최적값을 찾아나가는데, 최적값을 탐색하는 단계마다 입력 변수 및 결과가 저장될 Trials객체 생성
+trial_val = Trials()
+
+# 최대 5번을 탐색하여 최적 입력변수 찾기
+best_01 = fmin(fn=objective_func, space = search_space, algo=tpe.suggest, max_evals=5, trials=trial_val)
+print("best:", best_01)
+
+
+# 최대 20번을 탐색하여 최적 입력변수 찾기
+best_02 = fmin(fn=objective_func, space = search_space, algo=tpe.suggest, max_evals=20, trials=trial_val)
+print("best:", best_02)
+
+# 한눈에 보기 어려우므로, DataFrame형식으로 만들기
+# 매 탐색 시 마다 산출된 목적함수의 반환값리스트가 담긴다.
+losses = [loss_dict['loss'] for loss_dict in trial_val.results]
+
+# 매 탐색 시 마다 목적함수에 입력된 변수쌍, 반환값을 모아 DataFrame화 하기
+result_df = pd.DataFrame({'x':trial_val.vals['x'], 'y':trial_val.vals['y'], 'losses':losses})
+result_df.head()
