@@ -17,3 +17,10 @@ def get_clf_eval(y_test, pred=None, pred_proba=None):
   print("Recall : ", recall)
   print("F1 : ", f1)
   print("AUC : ", roc_auc)
+
+# This function receives classifier model, Train / Test datasets and print classifier's all performance indexes on the console.
+def get_model_train_eval(model, ftr_train=None, ftr_test=None, tgt_train=None, tgt_test=None):
+  model.fit(ftr_train, tgt_train)
+  pred = model.predict(ftr_test)
+  pred_proba = model.predict_proba(ftr_test)[:,1]
+  get_clf_eval(tgt_test, pred, pred_proba)
