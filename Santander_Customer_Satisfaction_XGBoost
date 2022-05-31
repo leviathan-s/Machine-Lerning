@@ -1,0 +1,84 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib
+import warnings
+from sklearn.model_selection import train_test_split
+from xgboost import XGBClassifier
+from sklearn.metrics import roc_auc_score
+
+warnings.filterwarnings('ignore')
+cust_df = pd.read_csv('./train.csv', encoding="latin-1")
+
+cust_df['var3'].replace(-999999,2,inplace=True)
+cust_df.drop('ID',axis=1,inplace=True)
+
+X_features = cust_df.iloc[:,:-1]
+y_labels = cust_df.iloc[:,-1]
+
+X_train, X_test, y_train, y_test = train_test_split(X_features, y_labels, test_size=0.2, random_state=0)
+
+X_tr, X_val, y_tr, y_val = train_test_split(X_train, y_train, test_size=0.3, random_state=0)
+
+xgb_clf = XGBClassifier(n_estimators=500, learning_rate=0.05, random_state=156)
+
+xgb_clf.fit(X_tr, y_tr, early_stopping_rounds=100, eval_metric="auc", eval_set=[(X_tr, y_tr), (X_val, y_val)])
+
+xgb_roc_score = roc_auc_score(y_test, xgb_clf.predict_proba(X_test)[:,1])
+print("ROC AUC : ", np.round(xgb_roc_score,4))
+
+---------------
+# Hyperopt를 사용하여 베이지안 최적화로 XGBoost 하이퍼 파라미터 튜닝 수행하기
+from hyperopt import hp, fmin, tpe, Trials
+from sklearn.model_selection import KFold
+
+xgb_search_space = {'max_depth': hp.quniform("max_depth",5,15,1),
+                    'min_child_weight' : hp.quniform('min_child_weight',1,6,1),
+                    'colsample_bytree' : hp.uniform('colsample_bytree',0.5,0.95),
+                    'learning_rate' : hp.uniform('learning_rate',0.01,0.2)}
+
+def objective_func(search_space):
+  xgb_clf = XGBClassifier(n_estimators=100, max_depth=int(search_space['max_depth']),
+                          min_child_weight=int(search_space['min_child_weight']),
+                          colsample_bytree=search_space['colsample_bytree'],
+                          learning_rate = search_space['learning_rate'])
+  roc_auc_list = []
+
+  kf = KFold(n_splits=3)
+
+  for tr_index, val_index in kf.split(X_train):
+    X_tr, y_tr = X_train.iloc[tr_index], y_train.iloc[tr_index]
+    X_val, y_val = X_train.iloc[val_index], y_train.iloc[val_index]
+
+    xgb_clf.fit(X_tr, y_tr, early_stopping_rounds=30, eval_metric="auc", eval_set=[(X_tr, y_tr), (X_val, y_val)])
+
+    score = roc_auc_score(y_val, xgb_clf.predict_proba(X_val)[:,1])
+    roc_auc_list.append(score)
+
+  return (-1) * np.mean(roc_auc_list)
+
+trials = Trials()
+
+best = fmin(fn=objective_func, space=xgb_search_space, algo=tpe.suggest, max_evals=50, trials=trials)
+print("best params : ", best)
+
+--------------------
+
+xgb_clf = XGBClassifier(n_esitmators=500, learning_rate=round(best['mearning_rate'],5),
+                        max_depth=int(best['max_depth']),
+                        min_child_weight=int(best['min_child_weight']),
+                        colsample_bytree=round(best['colsample_bytree'],5))
+
+xgb_clf.fit(X_tr, y_tr, early_stopping_rounds = 100, eval_metric="auc", eval_set=[(X_tr, y_tr),(X_val, y_val)])
+
+xgb_roc_score = roc_auc_score(y_test, xgb_clf.predict_proba(X_test)[:,1])
+print("ROC AUC : ", np.round(xgb_roc_score))
+
+----------------------
+# 시각화
+from xgboost import plot_importance
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+fig, ax = plt.subplots(1,1,figsize=(10,8))
+plot_importance(xgb_clf, ax=ax, max_num_features=20, height=0.4)
