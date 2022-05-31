@@ -6,43 +6,60 @@ from sklearn.model_selection import train_test_split,cross_val_score
 import numpy as np
 import pandas as pd
 
-dataset = load_breast_cancer()
+dataset = load_breast_cancer() # bunch type으로 breast_cancer 데이터가 반환된다
+
+# 필요한 데이터만 데이터프레임 형식으로 변환하기
 cancer_df = pd.DataFrame(data = dataset.data, columns = dataset.feature_names)
 cancer_df['target'] = dataset.target
 
+
+# 유방암 데이터의 features 추출, target 추출
 X_features = cancer_df.iloc[:,:-1]
 y_label = cancer_df.iloc[:,-1]
 
+# 훈련 데이터와 시험용 데이터로 분리 (8 : 2)
 X_train, X_test, y_train, y_test = train_test_split(X_features, y_label, test_size=0.2, random_state=156)
 
+# 훈련 데이터 중 일부를 검증용 데이터로 분리
 X_tr, X_val, y_tr, y_val = train_test_split(X_train, y_train)
 
+# XGBoost의 파라미터를 Bayesian Optimization으로 최적화하기 위하여 다음과 같이 변수공간을 만든다.
 xgb_search_space = {'max_depth' : hp.quniform('max_depth',5,20,1),
                     'min_child_weight' : hp.quniform('min_child_weight',1,2,1),
                     'learning_rate' : hp.uniform('learning_rate',0.01,0.2),
                     'colsample_bytree' : hp.uniform('colsample_bytree',0.5,1),}
 
+# 목적함수(최적화의 대상이 되는 함수) 작성
 def objective_func(search_space):
-  xgb_clf = XGBClassifier(n_estimators=100, max_depth=int(search_space['max_depth']),
+  xgb_clf = XGBClassifier(n_estimators=100, max_depth=int(search_space['max_depth']), # 파라미터에 넣을 때는 정수형으로 형변환
                           min_child_weight=int(search_space['min_child_weight']),
                           learning_rate=search_space['learning_rate'],
                           colsample_bytree=search_space['colsample_bytree'],
                           eval_metric='logloss')
   
+  # cross_val_Score : cv개수만큼의 검증결과를 리스트 형태로 반환한다.
   accuracy = cross_val_score(xgb_clf, X_train, y_train, scoring="accuracy", cv=3)
-
+  
+  # 3회에 걸친 교차검증 평균점수를 반환한다.
   return {'loss':-1*np.mean(accuracy),'status':STATUS_OK}
 
+# 매 최적화 단계마다의 정보가 저장되는 Trials 객체를 생성
 trial_val = Trials()
 
+# 목적함수(fn)를 대상으로 (space)파라미터들을 입력하여 총 50회 최적 파라미터를 찾도록 시도한다
+# 그리고 가장 최적의 파라미터들을 출력함
 best=fmin(fn=objective_func, space=xgb_search_space, algo=tpe.suggest, max_evals=50, trials=trial_val)
 print('best : ', best)
 
+# 50회의 bayesian optimization을 통해 검출된 가장 효율적인 하이퍼 파라미터를 설정하여 새 XGB분류기 생성
+# 예측 오류를 총 400회 동안 점진적으로 개선시켜 나간다. 그리고 50회동안 예측 오류가 개선되지 안으면 early_stopping 
 xgb_wrapper = XGBClassifier(n_estimators=400,
                             learning_rate=round(best['learning_rate'],5),
                             max_depth=int(best['max_depth']),
                             min_child_weight=int(best['min_child_weight']),
                             colsample_bytree=round(best['colsample_bytree'],5))
+                            
+
 evals = [(X_tr, y_tr),(X_val, y_val)]
 xgb_wrapper.fit(X_tr, y_tr, early_stopping_rounds=50, eval_metric='logloss', eval_set=evals, verbose=True)
 preds = xgb_wrapper.predict(X_test)
