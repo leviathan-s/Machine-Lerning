@@ -1,0 +1,84 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import warnings
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.linear_model import LogisticRegression
+from imblearn.over_sampling import SMOTE
+from lightgbm import LGBMClassifier
+
+warnings.filterwarnings("ignore")
+%matplotlib inline
+
+def get_outlier(df=None, column=None, weight=1.5):
+  fraud = df[df['Class']==1][column]
+  quantile_25 = np.percentile(fraud.values, 25)
+  quantile_75 = np.percentile(fraud.values, 75)
+  iqr = quantile_75 - quantile_25
+  iqr_weight = iqr * weight
+  lowest_val = quantile_25 - iqr_weight
+  highest_val = quantile_75 + iqr_weight
+
+  outlier_index = fraud[(fraud < lowest_val) | (fraud > highest_val)].index
+  return outlier_index
+
+def get_clf_eval(y_test, pred=None, pred_proba=None):
+  confusion = confusion_matrix(y_test, pred)
+  accuracy = accuracy_score(y_test, pred)
+  precision = precision_score(y_test, pred)
+  recall = recall_score(y_test, pred)
+  f1 = f1_score(y_test, pred)
+  roc_auc = roc_auc_score(y_test, pred_proba)
+  print("Confusion Matrix!")
+  print(confusion)
+  print("Accuracy : ", accuracy)
+  print("Precision : ", precision)
+  print("Recall : ", recall)
+  print("F1 : ", f1)
+  print("AUC : ", roc_auc)
+
+def get_model_train_eval(model, ftr_train=None, ftr_test=None, tgt_train=None, tgt_test=None):
+  model.fit(ftr_train, tgt_train)
+  pred = model.predict(ftr_test)
+  pred_proba = model.predict_proba(ftr_test)[:,1]
+  get_clf_eval(tgt_test, pred, pred_proba)
+
+def get_preprocessed_df(df=None):
+  df_copy = df.copy()
+  amount_n = np.log1p(df_copy['Amount'])
+  df_copy.insert(0,'Amount_Scaled', amount_n)
+  df_copy.drop(["Time","Amount"], axis=1, inplace=True)
+
+  # Logic for elinimate 'V14''s outlier datas
+  outlier_index = get_outlier(df=df_copy, column="V14", weight=1.5)
+  df_copy.drop(outlier_index, axis=0, inplace=True)
+
+  return df_copy
+
+def get_train_test_dataset(df=None):
+  df_copy = get_preprocessed_df(df)
+  
+  print(df_copy.head())
+
+  X_features = df_copy.iloc[:,:-1]
+  y_target = df_copy.iloc[:,-1]
+
+  X_train, X_test, y_train, y_test = train_test_split(X_features, y_target, test_size = 0.3, stratify = y_target)
+
+  return X_train, X_test, y_train, y_test
+
+card_df = pd.read_csv("creditcard.csv")
+
+X_train, X_test, y_train, y_test = get_train_test_dataset(card_df)
+
+# smoting data (Oversampling)
+smote = SMOTE()
+X_train_over, y_train_over = smote.fit_resample(X_train, y_train)
+
+lr_clf = LogisticRegression(max_iter=1000)
+get_model_train_eval(lr_clf, ftr_train=X_train_over, ftr_test=X_test, tgt_train=y_train_over, tgt_test=y_test)
+
+lgbm_clf = LGBMClassifier(n_estimators=1000, num_leaves=64, n_jobs=-1)
+get_model_train_eval(lgbm_clf, ftr_train=X_train, ftr_test=X_test, tgt_train=y_train, tgt_test=y_test)
