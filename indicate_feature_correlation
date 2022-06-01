@@ -1,0 +1,10 @@
+# Visualization correlation among all features
+# blue color : high positive correlation
+# red color : high negative correlation
+
+import seaborn as sns
+
+def indicate_feature_correlation(df):
+  plt.figure(figsize=(9,9))
+  corr = df.corr()
+  sns.heatmap(corr, cmap='RdBu')
