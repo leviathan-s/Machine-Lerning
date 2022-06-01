@@ -1,0 +1,17 @@
+# This function extract DataFrame's indexes having specific column's outlier datam.
+# input DataFrame, column in which you want to detect outlier data, weight(Default : 1.5)
+
+def get_outlier(df=None, column=None, weight=1.5):
+  fraud = df[df['Class']==1][column]
+  quantile_25 = np.percentile(fraud.values, 25)
+  quantile_75 = np.percentile(fraud.values, 75)
+  iqr = quantile_75 - quantile_25
+  iqr_weight = iqr * weight
+  lowest_val = quantile_25 - iqr_weight
+  highest_val = quantile_75 + iqr_weight
+
+  outlier_index = fraud[(fraud < lowest_val) | (fraud > highest_val)].index
+  return outlier_index
+
+outlier_index = get_outlier(df=card_df, column="V14", weight=1.5)
+print("이상치 인덱스 : ", outlier_index)
