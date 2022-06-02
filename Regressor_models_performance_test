@@ -1,0 +1,48 @@
+# Each model's mean RMSE
+
+from sklearn.datasets import load_boston
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.model_selection import cross_val_score
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from xgboost import XGBRegressor
+from lightgbm import LGBMRegressor
+import pandas as pd
+import numpy as np
+import warnings
+
+def get_model_cv_prediction(model, X_data, y_target):
+  neg_mse_scores = cross_val_score(model, X_data, y_target, cv=5, scoring="neg_mean_squared_error")
+  rmse_scores = np.sqrt(-1*neg_mse_scores)
+  print("model : ", model.__class__.__name__)
+  print("Avarage RMSE Scores : ", np.round(np.mean(rmse_scores),4))
+
+warnings.filterwarnings('ignore')
+
+boston = load_boston()
+bostonDF = pd.DataFrame(data=boston.data, columns=boston.feature_names)
+bostonDF['PRICE'] = boston.target
+
+y_target = bostonDF['PRICE']
+X_data = bostonDF.drop('PRICE', axis=1, inplace=False)
+
+dt_reg = DecisionTreeRegressor(max_depth=4)
+rf_reg = RandomForestRegressor(n_estimators=1000)
+gb_reg = GradientBoostingRegressor(n_estimators=1000)
+xgb_reg = XGBRegressor(n_estimators=1000)
+lgb_reg = LGBMRegressor(n_estimators=1000)
+
+models = [dt_reg, rf_reg, gb_reg, xgb_reg, lgb_reg]
+for model in models:
+  get_model_cv_prediction(model, X_data, y_target)
+  
+  
+  
+# Visualization of importance of features
+import seaborn as sns
+
+rf_reg = RandomForestRegressor(n_estimators=1000)
+
+rf_reg.fit(X_data, y_target)
+feature_importance = pd.Series(data = rf_reg.feature_importances_, index=X_data.columns)
+feature_importance = feature_importance.sort_values(ascending = False)
+sns.barplot(x=feature_importance, y=feature_importance.index)
