@@ -1,0 +1,167 @@
+import warnings
+warnings.filterwarnings('ignore')
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+house_df_org = pd.read_csv("./train.csv")
+house_df = house_df_org.copy()
+
+original_SalePrice = house_df['SalePrice']
+house_df['SalePrice'] = np.log1p(house_df['SalePrice'])
+
+house_df.drop(['Id','PoolQC','MiscFeature','Alley','Fence','FireplaceQu'], axis=1, inplace=True)
+house_df.fillna(house_df.mean(), inplace=True)
+
+house_df_ohe = pd.get_dummies(house_df)
+house_df_ohe.head()
+
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import cross_val_score
+
+def get_rmse(model):
+  pred = model.predict(X_test)
+  mse = mean_squared_error(y_test, pred)
+  rmse = np.sqrt(mse)
+  print(model.__class__.__name__,"로그 변환된 RMSE : ",np.round(rmse,3))
+  return rmse
+
+def get_rmses(models):
+  rmses = []
+  for model in models:
+    rmse = get_rmse(model)
+    rmses.append(rmse)
+  return rmses
+
+def get_top_bottom_coef(model, n=10):
+  coef = pd.Series(model.coef_, index = X_features.columns)
+  coef_high = coef.sort_values(ascending=False).head(n)
+  coef_low = coef.sort_values(ascending=False).tail(n)
+  return coef_high, coef_low
+
+def visualize_coefficient(models):
+  fig, axs = plt.subplots(figsize=(24,10), nrows=1, ncols=3)
+  fig.tight_layout()
+  for i_num, model in enumerate(models):
+    coef_high, coef_low = get_top_bottom_coef(model)
+    coef_concat = pd.concat([coef_high, coef_low])
+    axs[i_num].set_title(model.__class__.__name__+' Coefficient')
+    sns.barplot(x=coef_concat.values, y=coef_concat.index, ax=axs[i_num])
+
+def get_avg_rmse_cv(models):
+
+  for model in models:
+    rmse_list = np.sqrt(-1*cross_val_score(model, X_features, y_target, scoring="neg_mean_squared_error",cv=5))
+    rmse_avg = np.mean(rmse_list)
+    print("{0} RMSE List : {1}".format(model.__class__.__name__,rmse_list))
+    print("{0} Average RMSE : {1}".format(model.__class__.__name__,rmse_avg))
+    
+    
+from sklearn.linear_model import LinearRegression, Ridge, Lasso
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+
+y_target = house_df_ohe['SalePrice']
+X_features = house_df_ohe.drop('SalePrice',axis=1, inplace=False)
+X_train, X_test, y_train, y_test = train_test_split(X_features, y_target, test_size=0.2)
+
+lr_reg = LinearRegression()
+lr_reg.fit(X_train, y_train)
+
+ridge_reg = Ridge()
+ridge_reg.fit(X_train, y_train)
+
+lasso_reg = Lasso()
+lasso_reg.fit(X_train, y_train)
+
+models = [lr_reg, ridge_reg, lasso_reg]
+get_rmses(models)
+
+models = [lr_reg, ridge_reg, lasso_reg]
+visualize_coefficient(models)
+
+models = [ridge_reg, lasso_reg]
+get_avg_rmse_cv(models)
+
+# Ridge와 Lasso의 최적 파라미터를 찾아보자
+from sklearn.model_selection import GridSearchCV
+
+def print_best_params(model, params):
+  grid_model = GridSearchCV(model, param_grid=params, scoring="neg_mean_squared_error", cv=5)
+  grid_model.fit(X_features, y_target)
+  rmse = np.sqrt(-1*grid_model.best_score_)
+  print("{0} 5 CV시 최적 평균 RMSE값 : {1}, 최적 alpha값 : {2}".format(model.__class__.__name__, rmse, grid_model.best_params_))
+
+ridge_params = {'alpha' : [0.05,0.1,1,5,8,10,12,15,20]}
+lasso_params = {'alpha' : [0.001,0.005,0.008,0.05,0.03,0.1,0.5,1,5,10]}
+print_best_params(ridge_reg, ridge_params)
+print_best_params(lasso_reg, lasso_params)
+
+# 최적화된 값으로 LinearRegression, RidgeRegression, LassoRegression 생성 및 훈련
+# get_rmse로 rmse출력하고 시각화 함수 통하여 시각화
+
+lr_reg = LinearRegression()
+lr_reg.fit(X_train, y_train)
+
+ridge_reg = Ridge(alpha=12)
+ridge_reg.fit(X_train, y_train)
+
+lasso_reg = Lasso(alpha=0.01)
+lasso_reg.fit(X_train, y_train)
+
+models = [lr_reg, ridge_reg, lasso_reg]
+get_rmses(models)
+
+models = [lr_reg, ridge_reg, lasso_reg]
+visualize_coefficient(models)
+
+# 왜곡이 심한 분포를 가진 feature의 경우 log변환을 해 준다.
+
+from scipy.stats import skew
+
+features_index = house_df.dtypes[house_df.dtypes != 'object'].index
+skew_features = house_df[features_index].apply(lambda x: skew(x))
+skew_features_top = skew_features[skew_features > 1]
+house_df[skew_features_top.index] = np.log1p(house_df[skew_features_top.index])
+
+# log변환까지 하였으니, one_hot Encoding으로 다시 적용하기
+house_df_ohe = pd.get_dummies(house_df)
+
+y_target = house_df_ohe['SalePrice']
+X_features = house_df_ohe.drop('SalePrice', axis=1, inplace=False)
+
+X_train, X_test, y_train, y_test = train_test_split(X_features, y_target, test_size=0.2)
+
+# 피처 로그변환 후에 다시 하이퍼 파라미터를 튜닝한다
+ridge_params = {'alpha' : [0.05,0.1,1,5,8,10,12,15,20]}
+lasso_params = {'alpha' : [0.001, 0.005,0.008,0.05,0.03,0.1,0.5,1,5,10]}
+print_best_params(ridge_reg, ridge_params)
+print_best_params(lasso_reg, lasso_params)
+
+# 예측에 많은 영향을 미치는 feature인 GrLivArea의 분포도를 살펴보자
+
+plt.scatter(x=house_df_org['GrLivArea'], y=house_df_org['SalePrice'])
+plt.show()
+
+# GrLivArea가 4000이상인데 SalePrice가 500000이하인 데이터들은 이상치로 간주해 삭제하기
+
+cond1 = house_df_ohe['GrLivArea'] > np.log1p(4000)
+cond2 = house_df_ohe['SalePrice'] < np.log1p(500000)
+outlier_index = house_df_ohe[cond1 & cond2].index
+
+house_df_ohe.drop(outlier_index, axis=0, inplace=True)
+
+# 릿지와 라쏘 모델 최적화를 재 수행하고 결과 출력해보기
+
+y_target = house_df_ohe['SalePrice']
+X_features = house_df_ohe.drop('SalePrice', axis=1, inplace=False)
+
+X_train, X_test, y_train, y_test = train_test_split(X_features, y_target, test_size=0.2)
+
+# 피처 로그변환 후에 다시 하이퍼 파라미터를 튜닝한다
+ridge_params = {'alpha' : [0.05,0.1,1,5,8,10,12,15,20]}
+lasso_params = {'alpha' : [0.001, 0.005,0.008,0.05,0.03,0.1,0.5,1,5,10]}
+print_best_params(ridge_reg, ridge_params)
+print_best_params(lasso_reg, lasso_params)
