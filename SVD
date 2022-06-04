@@ -1,0 +1,81 @@
+# SVD의 예시를 들어보기
+# Numpy의 Singular value decomposition module import
+
+import numpy as np
+from numpy.linalg import svd
+
+a = np.random.seed(121)
+a = np.random.randn(4,4)
+print(np.round(a,3))
+
+
+# SVD를 계산하고 반환하기
+U, Sigma, Vt = svd(a)
+print(U)
+print()
+print(Sigma)
+print()
+print(Vt)
+print()
+
+# 분해된 U, Sigma, Vt를 내적하면 다시 원본 행렬로 변환이 가능하다
+
+Sigma_mat = np.diag(Sigma)
+a_ = np.dot(np.dot(U, Sigma_mat), Vt)
+print(np.round(a_,3))
+
+# 로우 간 의존성이 있을 경우 Sigma값(대칭행렬 / A행렬의 특잇값들의 대각행렬)이 어떻게 변하는지 보자
+
+a[2] = a[0] + a[1]
+a[3] = a[0]
+print(np.round(a))
+print()
+# 다시 특잇값 분해
+U, Sigma, Vt = svd(a)
+print(U)
+print()
+print(np.round(Sigma,3))
+print()
+print(Vt)
+print()
+
+# 특잇값 분해 된 것을 다시 원본으로 합친다
+# 특히 Sigma에서 0이 아닌 특잇값 두 개만을 추출하여 원본으로 합칠 예정이다
+U_ = U[:,:2]
+Sigma_ = np.diag(Sigma[:2])
+Vt_ = Vt[:2]
+
+a_ = np.dot(np.dot(U_, Sigma_),Vt_)
+print(a_)
+
+# 이번엔 Truncated SVD를 구현해보자
+
+import numpy as np
+from scipy.sparse.linalg import svds
+from scipy.linalg import svd
+
+matrix = np.random.randn(6,6)
+print("원본 행렬 : ")
+print(np.round(matrix,3))
+print()
+p = 4
+U_tr, Sigma_tr, Vt_tr = svds(matrix, k=p)
+org = np.dot(np.dot(U_tr, np.diag(Sigma_tr)), Vt_tr)
+print("Trucated SVD로 분해됬다가 복원된 행렬")
+print(np.round(org,3))
+
+# sklearn의 TruncatedSVD를 통하여 여러 개의 feature를 2개 feature로 차원축소 해보자
+from sklearn.decomposition import TruncatedSVD, PCA
+from sklearn.datasets import load_iris
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+iris = load_iris()
+iris_ftrs = iris.data
+tsvd = TruncatedSVD(n_components=2)
+iris_tsvd = tsvd.fit_transform(iris_ftrs)
+
+
+# scatter로 시각화 해보기
+plt.scatter(x=iris_tsvd[:,0], y=iris_tsvd[:,1], c=iris.target)
+plt.show()
