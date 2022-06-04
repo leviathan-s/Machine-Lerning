@@ -1,0 +1,141 @@
+from sklearn.datasets import load_iris
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+import pandas as pd
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+iris = load_iris()
+columns = []
+
+for col in iris.feature_names:
+  columns.append(col[:-5])
+
+irisDF = pd.DataFrame(iris.data, columns = columns)
+irisDF['target'] = iris.target
+
+print(irisDF.head())
+
+# 각 품종에 따라 원본 붓꽃 데이터 세트의 분포가 어떻게 되있는지 시각화하기
+markers=['^','s','o']
+
+for i, marker in enumerate(markers):
+  x_axis_data = irisDF[irisDF['target'] == i]['sepal length']
+  y_axis_data = irisDF[irisDF['target'] == i]['sepal width']
+  plt.scatter(x_axis_data, y_axis_data, marker=marker, label=iris.target_names[i])
+
+plt.legend()
+plt.show()
+
+# PCA를 하여 4개의 차원을 2개로 감소시킬 것이다.
+# PCA를 하기 전 Standard Scaler를 이용하여 normalization
+
+scaler = StandardScaler()
+iris_scaled = scaler.fit_transform(irisDF.iloc[:,:-1])
+
+# PCA로 4차원 feature를 2차원 feature로 분해한다
+pca = PCA(n_components=2)
+
+pca.fit(iris_scaled)
+iris_pca = pca.transform(iris_scaled)
+
+# 변환된 PCA를 확인해보기
+
+irisDF_pca = pd.DataFrame(iris_pca, columns=['PCA_component 1','PCA_component 2'])
+irisDF_pca['target'] = irisDF['target']
+irisDF_pca.head()
+
+# 2개의 속성으로 변환된 데이터 세트를 2차원상에서 시각화 해보기
+
+markers=['^','s','o']
+for i, marker in enumerate(markers):
+  x_axis_data = irisDF_pca[irisDF_pca['target'] == i]['PCA_component 1']
+  y_axis_data = irisDF_pca[irisDF_pca['target'] == i]['PCA_component 2']
+  plt.scatter(x_axis_data, y_axis_data, label=iris.target_names[i])
+
+
+plt.legend()
+plt.xlabel("PCA_component 1")
+plt.ylabel("PCA_component 2")
+plt.show()
+
+# 일반 데이터 / 차원 축소된 데이터의 예측 결과 성능을 비교해보자
+
+# 일반 데이터의 경우
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import cross_val_score
+import numpy as np
+
+rcf = RandomForestClassifier()
+scores = cross_val_score(rcf, iris.data, iris.target, scoring="accuracy", cv=3)
+print("교차검증 별 정확도 : ",scores)
+print("교차검증 평균 정확도 : ",np.mean(scores))
+
+# 차원 축소된 데이터의 경우
+pca_X = irisDF_pca[['PCA_component 1','PCA_component 2']]
+scores_pca = cross_val_score(rcf, pca_X, iris.target, scoring="accuracy", cv=3)
+print("교차검증 별 정확도 : ",scores_pca)
+print("교차검증 평균 정확도 : ",np.mean(scores_pca))
+
+# 실제 데이터에 적용해보기
+import pandas as pd
+import warnings
+warnings.filterwarnings('ignore')
+
+df = pd.read_excel('train.xls', header=1, sheet_name = "Data").iloc[0:,1:]
+df.shape
+
+# 필요없는 열 삭제 및 열의 이름을 간단하게 변경하기
+
+df.rename(columns = {'PAY_0':'PAY_1','default payment next month':'default'}, inplace=True)
+y_target = df['default']
+X_features = df.drop('default', axis=1)
+
+# DataFrame의 corr()를 이용하여 각 features간의 상관도를 구하고 이를 seaborn의 heatmap으로 시각화
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+corr = X_features.corr()
+plt.figure(figsize=(14,14))
+sns.heatmap(corr, annot=True, fmt='1g')
+
+# 상관도가 매우 높게 나타나는 BILL_AMT1 ~ BILL_AMT6까지의 데이터를
+# 2차원으로 축소해보고 나서
+# 개별 컴포넌트의 변동성을 확인한다
+
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+
+cols_bill = ['BILL_AMT' + str(i) for i in range(1,7)]
+print("대상 속성명 : ", cols_bill)
+
+scaler = StandardScaler()
+df_cols_scaled = scaler.fit_transform(X_features[cols_bill])
+pca = PCA(n_components=2)
+pca.fit(df_cols_scaled)
+print("PCA Component별 변동성 : ", pca.explained_variance_ratio_)
+
+# 원본 데이터 세트와 6개 컴포넌트로 PCA차원축소 시킨 데이터 세트의 분류 예측 결과 상호 비교
+
+# 원본 데이터 세트의 예측 성능 평가
+
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import cross_val_score
+
+rcf = RandomForestClassifier(n_estimators=300)
+scores = cross_val_score(rcf, X_features, y_target, scoring="accuracy", cv=3)
+print("교차검증 별 정확도 : ",scores)
+print("교차검증 평균 정확도 : ",np.mean(scores))
+
+# PCA 차원축소에 의하여 feature가 6개가 되어버린 데이터 세트로 교차검증 성능평가
+scaler = StandardScaler()
+df_scaled = scaler.fit_transform(X_features)
+
+pca = PCA(n_components=6)
+df_pca = pca.fit_transform(df_scaled)
+scores = cross_val_score(rcf, df_pca, y_target, scoring="accuracy", cv=3)
+print("교차검증 별 정확도 : ",scores)
+print("교차검증 평균 정확도 : ",np.mean(scores))
