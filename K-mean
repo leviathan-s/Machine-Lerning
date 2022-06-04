@@ -1,0 +1,129 @@
+from sklearn.preprocessing import scale
+from sklearn.datasets import load_iris
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+%matplotlib inline
+
+iris = load_iris()
+irisDF = pd.DataFrame(data=iris.data, columns=['sepal_length','sepal_width','petal_length','petal_width'])
+irisDF.head()
+
+# 붓꽃 데이터 세트를 3개 그룹으로 군집화 하기
+kmeans = KMeans(n_clusters=3, init="k-means++", max_iter=300)
+kmeans.fit(irisDF)
+
+# 각 데이터가 어떠한 군집 중심에 포함되는지 확인해보기
+print(kmeans.labels_)
+print()
+# 데이터프레임화 하여 상세 확인
+irisDF['target'] = iris.target
+irisDF['cluster'] = kmeans.labels_
+iris_result = irisDF.groupby(['target','cluster']).count()
+iris_result.head()
+
+# 군집화를 시각화 해보기
+# 4개 차원을 평면화할 수 없으니, 2차원으로 변환한 후에 시각화 할 것이다.
+from sklearn.decomposition import PCA
+
+pca = PCA(n_components = 2)
+pca_transformed = pca.fit_transform(iris.data)
+
+irisDF['pca_x'] = pca_transformed[:,0]
+irisDF['pca_y'] = pca_transformed[:,1]
+irisDF.head()
+
+# 1축과 2축 시각화
+marker0_ind = irisDF[irisDF['cluster']==0].index
+marker1_ind = irisDF[irisDF['cluster']==1].index
+marker2_ind = irisDF[irisDF['cluster']==2].index
+
+plt.scatter(x=irisDF.loc[marker0_ind, 'pca_x'], y=irisDF.loc[marker0_ind, 'pca_y'], marker="o")
+plt.scatter(x=irisDF.loc[marker1_ind, 'pca_x'], y=irisDF.loc[marker1_ind, 'pca_y'], marker="s")
+plt.scatter(x=irisDF.loc[marker2_ind, 'pca_x'], y=irisDF.loc[marker2_ind, 'pca_y'], marker="^")
+
+plt.xlabel("pca 1")
+plt.ylabel("pca 2")
+plt.show()
+
+# 군집 데이터 생성기로 데이터를 생성하고 DataFrame으로 변환하기
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from sklearn.datasets import make_blobs
+%matplotlib inline
+
+X,y = make_blobs(n_samples=200, n_features=2, centers=3, cluster_std=0.8)
+print(X.shape, y.shape)
+
+unique, counts = np.unique(y, return_counts=True)
+print(unique, counts)
+
+clusterDF = pd.DataFrame(data=X, columns=['ftr1','ftr2'])
+clusterDF['target'] = y
+clusterDF.head()
+
+# Target별로 시각화 해보기
+target_list = np.unique(y)
+markers = ['o','s','^','P','D','H','x']
+
+for target in target_list:
+  target_df = clusterDF[clusterDF['target'] == target]
+  plt.scatter(x=target_df['ftr1'], y=target_df['ftr2'], marker=markers[target])
+
+plt.show()
+
+# kmeans 객체를 이용해 X데이터에 대한 K-means clustering 실시하기
+
+kmeans = KMeans(n_clusters=3, init="k-means++", max_iter=200)
+cluster_labels = kmeans.fit_predict(X)
+clusterDF['kmeans_label'] = cluster_labels
+
+# cluster_centers_는 개별 클러스터의 중심 위치 좌표 시각화를 위해 추출
+centers = kmeans.cluster_centers_
+unique_labels = np.unique(cluster_labels)
+
+markers = ['o','s','^','P','D','H','x']
+
+for label in unique_labels:
+  label_cluster = clusterDF[clusterDF['kmeans_label'] == label]
+  center_x_y = centers[label]
+  plt.scatter(x=label_cluster['ftr1'], y=label_cluster['ftr2'], edgecolor='k', marker=markers[label])
+
+  plt.scatter(x=center_x_y[0], y=center_x_y[1], s=200, color="white",alpha=0.9, edgecolor='k', marker=markers[label])
+  plt.scatter(x=center_x_y[0], y=center_x_y[1], s=70, color="k", edgecolor='k', marker='$%d$' %label)
+
+plt.show()
+
+# 붓꽃 데이터 세트를 이용한 군집 평가
+from sklearn.preprocessing import scale
+from sklearn.datasets import load_iris
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_samples, silhouette_score
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+%matplotlib inline
+
+iris=load_iris()
+feature_names = ['sepal_length','sepal_width','petal_length','petal_width']
+irisDF = pd.DataFrame(data=iris.data, columns = feature_names)
+kmeans = KMeans(n_clusters=3, init='k-means++', max_iter=300, random_state=0).fit(irisDF)
+irisDF['cluster'] = kmeans.labels_
+
+# iris의 모든 개별 데이터에 silhouette value를 구한다
+score_samples = silhouette_samples(iris.data, irisDF['cluster'])
+print("Silhouette_samples return 값의 shape : ", score_samples.shape)
+
+# 모든 데이터의 실루엣 계수를 irisDF에 추가하기
+irisDF['silhouette_coeff'] = score_samples
+
+average_score = silhouette_score(iris.data, irisDF['cluster'])
+print("붓꽃 데이터 세트의 실루엣 분석 점수 : ",np.round(average_score,3))
+
+
+# 군집별로 실루엣 계수를 파악해보기
+irisDF.groupby('cluster').mean()
